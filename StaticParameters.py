@@ -1,0 +1,3 @@
+staticParametersDict = {
+	"startingNumberOfAxons" : 0
+}
