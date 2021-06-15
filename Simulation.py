@@ -2,6 +2,8 @@ import numpy as np
 from mpl_toolkits import mplot3d
 import matplotlib.pyplot as plt
 import math 
+import helperFunctions as hf
+
 class Simulation:
   def __init__(self,staticModelParametersDictionary):
     self.staticParameters = dict(staticModelParametersDictionary)
@@ -19,12 +21,7 @@ class Simulation:
         self.axons.append({"counter":0,"axonalTipPositions":[np.array(startingPositions[i])], "lastTheta":self.staticParameters["initialThetas"]}) 
         print("Init axon with starting point: " + str(startingPositions[i]))
 
-  def sph2cart(self, az, el, r):
-    rcos_theta = r * np.cos(el)
-    x = rcos_theta * np.cos(az)
-    y = rcos_theta * np.sin(az)
-    z = r * np.sin(el)
-    return [x, y, z]
+
   
   def getStepSize(self):
     return self.staticParameters["stepSize"] #can be randomized
@@ -50,7 +47,7 @@ class Simulation:
     finalAngle_0 = 2*np.arctan(thetas_0[step])
     finalAngle_1 = 2*np.arctan(thetas_1[step])
 
-    growthVector=np.array(self.sph2cart(finalAngle_0,finalAngle_1,self.getStepSize()));
+    growthVector=np.array(hf.sph2cart(finalAngle_0,finalAngle_1,self.getStepSize()));
     return growthVector
 
   def runTimeStepForAxon(self,currentAxon):
@@ -106,11 +103,11 @@ class Simulation:
         print("Current axon tip points:")
         for axon in self.axons:
             print(axon["axonalTipPositions"][-1])
-        for axon in self.numberOfAxons:
+        for axon in self.axons:
 
 
-            self.runTimeStepForAxon(axonIndex)
-            self.checkTargetReached(axonIndex)
+            self.runTimeStepForAxon(axon)
+            self.checkTargetReached(axon)
 
             self.currentTimeStep += 1
 
@@ -125,8 +122,4 @@ class Simulation:
     zline = [tipPosition[2] for tipPosition in self.axons[0]["axonalTipPositions"]]
     ax.plot3D(xline, yline, zline, 'gray')
     plt.show()
-    #image = np.zeroes(100,100)
-    #plt.figure()
-    #plt.imshow(sample_image) 
-    #plt.show()
     pass
