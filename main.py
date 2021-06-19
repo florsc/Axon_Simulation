@@ -1,7 +1,9 @@
 from Simulation import Simulation
+from Visualizer import Visualizer
 from StaticParameters import staticParametersDict
 
 if __name__ == '__main__':
     simulation = Simulation(staticParametersDict)
     simulation.runSimulation()
-    simulation.visualizeResults()
+    visualizer = Visualizer(simulation.axons)
+    visualizer.visualize(exteriorLimit="TUBE")
