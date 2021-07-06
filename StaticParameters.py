@@ -1,12 +1,11 @@
 import helperFunctions as hf
 
-
 staticParametersDict = {
-    "startingNumberOfAxons": 10,
+    "startingNumberOfAxons": 50,
     "alpha": 7.445,
     "beta": 1.665,
     # currently only a x value corresponding to the original simulation
-    "targetAreaXValue": 70,
+    "targetAreaXValue": 100,
     "maximumNumberOfStepsEachTimePoint": 6,
     "growthLengthEachStep": 1,
     "axonDiameter": 0.4,
@@ -17,5 +16,10 @@ staticParametersDict = {
     # I was absolutely not able to understand how this is handled in the original code, but it shouldn't have much influence anyway
     "initialThetas": [0, 0],
     "ExteriorLimit": hf.getExteriorLimitTube(33.4),
-    "maximumNumberOfEncounters": 140
+    "maximumNumberOfEncounters": 140,
+    "probabilityForNewBranchEachTimeStep": 0.05
+}
+debugStuff = {
+    "printInformation" : False,
+    "measureTime" : True
 }

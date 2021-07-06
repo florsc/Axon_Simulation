@@ -4,10 +4,11 @@ import helperFunctions as hf
 
 
 class Simulation:
-    def __init__(self, staticModelParametersDictionary):
+    def __init__(self, staticModelParametersDictionary, simpleDebugHelper):
         self.staticParameters = dict(staticModelParametersDictionary)
-        print("Set static model parameters:")
-        print(self.staticParameters)
+        self.simpleDebugHelper = simpleDebugHelper
+        self.simpleDebugHelper.print("Set static model parameters:")
+        self.simpleDebugHelper.print(self.staticParameters)
         self.initializeVariables()
 
     def initializeVariables(self):
@@ -18,9 +19,9 @@ class Simulation:
         startingPositions = self.getStartPositions()
         for i in range(self.staticParameters["startingNumberOfAxons"]):
             self.axons.append({"counter": 0, "axonalTipPositions": [np.array(
-                startingPositions[i])], "thetas": [self.staticParameters["initialThetas"]], "interactionCounter": 0, "active": True})
+                startingPositions[i])], "thetas": [self.staticParameters["initialThetas"]], "interactionCounter": 0, "active": True, "rootAxonIndex" : i, "branchIndices" : []})
 
-            print("Init axon with starting point: " +
+            self.simpleDebugHelper.print("Init axon with starting point: " +
                   str(startingPositions[i]))
 
         # TODO this whole spatial occupation stuff is most likely possible to implement more efficient with numpy and the correct functions
@@ -75,7 +76,16 @@ class Simulation:
         for i in range(min(2, growthStepThisTimePoint)):
             currentAxon["thetas"].pop()
             currentAxon["axonalTipPositions"].pop()
-        pass
+
+    def checkNewBranchCondition(self):
+        if np.random.uniform(0,1)<self.staticParameters["probabilityForNewBranchEachTimeStep"]:
+            return True
+
+    def createNewBranch(self, branchingAxon, possibleBranchingPoints):
+        branchingPoint = branchingAxon["axonalTipPositions"][-np.random.randint(possibleBranchingPoints)]
+        branchingAxon["branchIndices"].append(len(self.axons))
+        self.axons.append({"axonalTipPositions": [branchingPoint], "thetas": [self.staticParameters["initialThetas"]], "interactionCounter": branchingAxon["interactionCounter"], "active": True, "rootAxonIndex": branchingAxon["rootAxonIndex"], "branchIndices": []})
+
 
     def runTimeStepForAxon(self, currentAxon):
         growthStepThisTimePoint = 1
@@ -90,9 +100,9 @@ class Simulation:
             currentAxon["thetas"].append(sampledTheta)
 
             if self.checkForMechanicalInteractions(currentAxon):
-                print("Mechanical Interaction encountered at position: " +
+                self.simpleDebugHelper.print("Mechanical Interaction encountered at position: " +
                       str(currentAxon["axonalTipPositions"][-1]))
-                print("Number of interactions this timePoint: " +
+                self.simpleDebugHelper.print("Number of interactions this timePoint: " +
                       str(interactionCounter))
                 self.handleMechanicalInteraction(
                     currentAxon, growthStepThisTimePoint)
@@ -100,6 +110,9 @@ class Simulation:
                 interactionCounter += 1
             else:
                 growthStepThisTimePoint += 1
+
+        if self.checkNewBranchCondition():
+            self.createNewBranch(currentAxon, growthStepThisTimePoint)
 
         currentAxon["interactionCounter"] += interactionCounter
         self.addOccupiedAreaCenters(currentAxon, growthStepThisTimePoint)
@@ -109,9 +122,25 @@ class Simulation:
         if len(self.occupiedSpatialAreaCenters) > 0:
             tipPosition = currentAxon["axonalTipPositions"][-1]
             # TODO leverage the order in occupiedSpatialAreaCenters
+            """
+            low = 0
+            high = self.occupiedSpatialAreaCenters.size
+            for i in self.occupiedSpatialAreaCenters:
+                if i[0]>tipPosition[0]:
+                    break
+                low +=1
+
+            for i in self.occupiedSpatialAreaCenters[-1:0]:
+                if i[0]<tipPosition[0]:
+                    break
+                high -=1
+            """
+            self.simpleDebugHelper.start("checkForOtherNeurites")
+            
             if np.any(np.argwhere(np.linalg.norm(self.occupiedSpatialAreaCenters - tipPosition) <= self.staticParameters["minimalDistanceBetweenAxons"])):
                 otherNeuriteEncountered = True
 
+            self.simpleDebugHelper.stop("checkForOtherNeurites")
         return otherNeuriteEncountered
 
     def checkForExteriorLimits(self, currentAxon):
@@ -133,12 +162,14 @@ class Simulation:
 
         return mechanicalConstraintEncountered
 
-    # TODO stop all branches when branching is implemented
-    def checkTargetReached(self, currentAxon):
-        if currentAxon["axonalTipPositions"][-1][0] > self.staticParameters["targetAreaXValue"]:
-            print("Axon reached finish at position." +
-                  str(currentAxon["axonalTipPositions"][-1]))
-            currentAxon["active"] = False
+    def finishAxonAndBranches(self, axon):
+        for i in axon["branchIndices"]:
+            self.finishAxonAndBranches(self.axons[i])
+        self.finishAxonBranch(axon)
+
+    def finishAxonBranch(self, axon):
+        if axon["active"]:
+            axon["active"] = False
             self.numberOfFinishedAxons += 1
 
     def getAxisStartPositions(self, axisIndex):
@@ -184,15 +215,20 @@ class Simulation:
 
     def checkNumberOfEncounters(self, axon):
         if axon["interactionCounter"] > self.staticParameters["maximumNumberOfEncounters"]:
-            axon["active"] = False
-            self.numberOfFinishedAxons += 1
+            self.finishAxonBranch(axon)
+
+    def checkTargetReached(self, currentAxon):
+        if currentAxon["axonalTipPositions"][-1][0] > self.staticParameters["targetAreaXValue"]:
+            self.simpleDebugHelper.print("Axon reached finish at position." +
+                  str(currentAxon["axonalTipPositions"][-1]))
+            self.finishAxonAndBranches(self.axons[currentAxon["rootAxonIndex"]])
 
     def runSimulation(self):
         while (self.numberOfAxons - self.numberOfFinishedAxons) > 0:
-            print("Timestep: " + str(self.currentTimeStep))
-            print("Current axon tip points:")
+            self.simpleDebugHelper.print("Timestep: " + str(self.currentTimeStep))
+            self.simpleDebugHelper.print("Current axon tip points:")
             for axonIndex in range(len(self.axons)):
-                print("Axon " + str(axonIndex) + "(" + ("active" if self.axons[axonIndex]["active"] else "finished") + ": " + str(
+                self.simpleDebugHelper.print("Axon " + str(axonIndex) + "(" + ("active" if self.axons[axonIndex]["active"] else "finished") + ": " + str(
                     self.axons[axonIndex]["axonalTipPositions"][-1]))
             for axon in self.axons:
                 if axon["active"] == True:
@@ -203,4 +239,4 @@ class Simulation:
 
                     self.currentTimeStep += 1
 
-        print("Simulation successfull finished.")
+        self.simpleDebugHelper.print("Simulation successfull finished.")

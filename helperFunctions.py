@@ -3,7 +3,7 @@ import numpy as np
 
 def sortNumpyArrayAlongColumn(array, columnNumber):
     # TODO in our usecase an inplace insertion sort would be ideal, maybe later
-    return array[array[:, 1].argsort()]
+    return array #array[array[:, 0].argsort()]
 
 
 def sph2cart(az, el, r):
