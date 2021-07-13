@@ -1,6 +1,7 @@
 import numpy as np
 import math
 import helperFunctions as hf
+from scipy.stats import levy_stable
 
 
 class Simulation:
@@ -11,6 +12,9 @@ class Simulation:
         self.simpleDebugHelper.print(self.staticParameters)
         self.initializeVariables()
 
+    def sampleInitialThetas(self):
+        return np.tan(np.random.uniform(-math.pi,math.pi,2))
+
     def initializeVariables(self):
         self.currentTimeStep = 0
         self.numberOfAxons = self.staticParameters["startingNumberOfAxons"]
@@ -19,27 +23,23 @@ class Simulation:
         startingPositions = self.getStartPositions()
         for i in range(self.staticParameters["startingNumberOfAxons"]):
             self.axons.append({"counter": 0, "axonalTipPositions": [np.array(
-                startingPositions[i])], "thetas": [self.staticParameters["initialThetas"]], "interactionCounter": 0, "active": True, "rootAxonIndex" : i, "branchIndices" : []})
+                startingPositions[i])], "thetas": [self.sampleInitialThetas()], "interactionCounter": 0, "active": True, "rootAxonIndex" : i, "branchIndices" : []})
 
             self.simpleDebugHelper.print("Init axon with starting point: " +
                   str(startingPositions[i]))
-
-        # TODO this whole spatial occupation stuff is most likely possible to implement more efficient with numpy and the correct functions
-        self.occupiedSpatialAreaCenters = hf.sortNumpyArrayAlongColumn(
-            np.array(startingPositions), 0)
-        self.numberOfAreaCentersEachGrowthStep = math.floor(
-            self.staticParameters["growthLengthEachStep"]/self.staticParameters["minimalDistanceBetweenAxons"])
-        self.distanceBetweenCenters = self.staticParameters["minimalDistanceBetweenAxons"] / \
-            self.numberOfAreaCentersEachGrowthStep
-
+        self.occupiedSpatialAreaCenters= np.array(startingPositions)[np.array(startingPositions)[:, 0].argsort()]
+        
     def getStepSize(self):
         # can be randomized but then self.numberOfAreaCentersEachGrowthStep needs to be adjusted
-        return self.staticParameters["growthLengthEachStep"]
+        stepLengthData = self.staticParameters["growthLengthEachStep"]
+        if stepLengthData["type"] == "LEVY":
+            return levy_stable.rvs(stepLengthData["alpha"], stepLengthData["beta"])
+        if stepLengthData["type"] == "CONSTANT":
+            return stepLengthData["length"]
 
-    def sampleModelGrowthVector(self, currentAxon, growthStepThisTimePoint):
+    def sampleModelGrowthVector(self, currentAxon):
         alpha = self.staticParameters["alpha"]
         beta = self.staticParameters["beta"]
-        step = growthStepThisTimePoint
 
         lastTheta_0 = currentAxon["thetas"][-1][0]
         expectation_0 = (alpha/(alpha+beta))*lastTheta_0
@@ -57,20 +57,25 @@ class Simulation:
         finalAngle_0 = 2*np.arctan(lastTheta_0)
         finalAngle_1 = 2*np.arctan(lastTheta_1)
 
+        stepSize = self.getStepSize()
         growthVector = np.array(hf.sph2cart(
-            finalAngle_0, finalAngle_1, self.getStepSize()))
+            finalAngle_0, finalAngle_1, stepSize))
         return growthVector, (newTheta_0, newTheta_1)
 
     def addOccupiedAreaCenters(self, currentAxon, growthStepThisTimePoint):
         newSpatialAreaCenters = []
         tipPositions = currentAxon["axonalTipPositions"]
         for growthStep in range(growthStepThisTimePoint):
-            for center in range(self.numberOfAreaCentersEachGrowthStep-1):
-                newSpatialAreaCenters.append(tipPositions[growthStep]+center*self.distanceBetweenCenters*(
+            stepSize = np.linalg.norm(tipPositions[growthStep] - tipPositions[growthStep-1])
+            numberOfAreaCentersEachGrowthStep = math.floor(
+                stepSize/self.staticParameters["minimalDistanceBetweenAxons"])+1
+            distanceBetweenCenters = stepSize / \
+                numberOfAreaCentersEachGrowthStep
+            for center in range(numberOfAreaCentersEachGrowthStep-1):
+                newSpatialAreaCenters.append(tipPositions[growthStep]+center*distanceBetweenCenters*(
                     tipPositions[growthStep]-tipPositions[growthStep-1]))
-
-        self.occupiedSpatialAreaCenters = hf.sortNumpyArrayAlongColumn(
-            np.append(self.occupiedSpatialAreaCenters, newSpatialAreaCenters, 0), 1)
+        self.occupiedSpatialAreaCenters = hf.addNumpyArraySortedAlongColumn(
+            self.occupiedSpatialAreaCenters, np.array(newSpatialAreaCenters), 0)
 
     def handleMechanicalInteraction(self, currentAxon, growthStepThisTimePoint):
         for i in range(min(2, growthStepThisTimePoint)):
@@ -92,9 +97,7 @@ class Simulation:
         interactionCounter = 0
 
         while growthStepThisTimePoint < self.staticParameters["maximumNumberOfStepsEachTimePoint"] and interactionCounter < 2:
-            growthVector, sampledTheta = self.sampleModelGrowthVector(currentAxon,
-                                                                      growthStepThisTimePoint)
-            # TODO this could cause issues when retraction is implemented, replace -1
+            growthVector, sampledTheta = self.sampleModelGrowthVector(currentAxon)
             currentAxon["axonalTipPositions"].append(
                 growthVector + currentAxon["axonalTipPositions"][-1])
             currentAxon["thetas"].append(sampledTheta)
@@ -115,43 +118,35 @@ class Simulation:
             self.createNewBranch(currentAxon, growthStepThisTimePoint)
 
         currentAxon["interactionCounter"] += interactionCounter
-        self.addOccupiedAreaCenters(currentAxon, growthStepThisTimePoint)
+        if growthStepThisTimePoint>1:
+            self.addOccupiedAreaCenters(currentAxon, growthStepThisTimePoint)
 
     def checkForOtherNeurites(self, currentAxon):
         otherNeuriteEncountered = False
         if len(self.occupiedSpatialAreaCenters) > 0:
             tipPosition = currentAxon["axonalTipPositions"][-1]
-            # TODO leverage the order in occupiedSpatialAreaCenters
-            """
-            low = 0
-            high = self.occupiedSpatialAreaCenters.size
-            for i in self.occupiedSpatialAreaCenters:
-                if i[0]>tipPosition[0]:
-                    break
-                low +=1
-
-            for i in self.occupiedSpatialAreaCenters[-1:0]:
-                if i[0]<tipPosition[0]:
-                    break
-                high -=1
-            """
             self.simpleDebugHelper.start("checkForOtherNeurites")
+            lowHigh = np.searchsorted(self.occupiedSpatialAreaCenters[0],[tipPosition[0]-self.staticParameters["minimalDistanceBetweenAxons"], tipPosition[0]+self.staticParameters["minimalDistanceBetweenAxons"]])
             
-            if np.any(np.argwhere(np.linalg.norm(self.occupiedSpatialAreaCenters - tipPosition) <= self.staticParameters["minimalDistanceBetweenAxons"])):
+            if np.any(np.argwhere(np.linalg.norm(self.occupiedSpatialAreaCenters[lowHigh[0]:lowHigh[1]] - tipPosition) <= self.staticParameters["minimalDistanceBetweenAxons"])):
                 otherNeuriteEncountered = True
 
             self.simpleDebugHelper.stop("checkForOtherNeurites")
         return otherNeuriteEncountered
 
     def checkForExteriorLimits(self, currentAxon):
-        HELLO = False  # A better name would be exteriorLimitEncountered, but to honor the most random variable name I have ever seen I decided to use the name from the original code
+        exteriorLimitEncountered = False  
         position = currentAxon["axonalTipPositions"][-1]
         limitDict = self.staticParameters["ExteriorLimit"]
         if limitDict["type"] == "TUBE":
             if position[1] ** 2 + position[2] ** 2 >= limitDict["radius"] ** 2:
-                HELLO = True
+                exteriorLimitEncountered = True
 
-        return HELLO
+        if limitDict["type"] == "BALL":
+            if position[0] ** 2 + position[1] ** 2 + position[2] ** 2>= limitDict["radius"] ** 2:
+                exteriorLimitEncountered = True
+
+        return exteriorLimitEncountered
 
     def checkForMechanicalInteractions(self, currentAxon):
         mechanicalConstraintEncountered = self.checkForExteriorLimits(
@@ -206,9 +201,9 @@ class Simulation:
         xPositionsIndices = [math.floor(
             linearPositionIndices[i] / (lenY*lenZ)) for i in range(len(linearPositionIndices))]
         yPositionsIndices = [math.floor((linearPositionIndices[i] - (
-            lenX * xPositionsIndices[i])) / lenZ) for i in range(len(linearPositionIndices))]
-        zPositionsIndices = [math.floor((linearPositionIndices[i] - (lenX * xPositionsIndices[i]) - (
-            lenY * yPositionsIndices[i]))) for i in range(len(linearPositionIndices))]
+            (lenY*lenZ) * xPositionsIndices[i])) / lenZ) for i in range(len(linearPositionIndices))]
+        zPositionsIndices = [math.floor((linearPositionIndices[i] - ((lenY*lenZ) * xPositionsIndices[i]) - (
+            lenZ * yPositionsIndices[i]))) for i in range(len(linearPositionIndices))]
         positions = [[xAxisPositions[xPositionsIndices[i]], yAxisPositions[yPositionsIndices[i]],
                       zAxisPositions[zPositionsIndices[i]]] for i in range(self.staticParameters["startingNumberOfAxons"])]
         return positions
@@ -218,15 +213,19 @@ class Simulation:
             self.finishAxonBranch(axon)
 
     def checkTargetReached(self, currentAxon):
-        if currentAxon["axonalTipPositions"][-1][0] > self.staticParameters["targetAreaXValue"]:
+        distanceVectors = currentAxon["axonalTipPositions"][-1] - self.staticParameters["target"]["centers"]
+
+        if np.any( distanceVectors[:,0] ** 2 +distanceVectors[:,1] ** 2 +distanceVectors[:,2] ** 2 < self.staticParameters["target"]["radius"]**2):
             self.simpleDebugHelper.print("Axon reached finish at position." +
                   str(currentAxon["axonalTipPositions"][-1]))
             self.finishAxonAndBranches(self.axons[currentAxon["rootAxonIndex"]])
 
     def runSimulation(self):
         while (self.numberOfAxons - self.numberOfFinishedAxons) > 0:
+
             self.simpleDebugHelper.print("Timestep: " + str(self.currentTimeStep))
             self.simpleDebugHelper.print("Current axon tip points:")
+
             for axonIndex in range(len(self.axons)):
                 self.simpleDebugHelper.print("Axon " + str(axonIndex) + "(" + ("active" if self.axons[axonIndex]["active"] else "finished") + ": " + str(
                     self.axons[axonIndex]["axonalTipPositions"][-1]))

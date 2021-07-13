@@ -11,4 +11,4 @@ if __name__ == '__main__':
     simpleDebugHelper.stop("complete")
     simpleDebugHelper.printMeasurements()
     visualizer = Visualizer(simulation.axons)
-    visualizer.visualize(exteriorLimit="TUBE")
+    visualizer.visualize(staticParametersDict["ExteriorLimit"],staticParametersDict["target"])

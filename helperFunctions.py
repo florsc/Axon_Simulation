@@ -1,9 +1,8 @@
 import numpy as np
 
-
-def sortNumpyArrayAlongColumn(array, columnNumber):
-    # TODO in our usecase an inplace insertion sort would be ideal, maybe later
-    return array #array[array[:, 0].argsort()]
+def addNumpyArraySortedAlongColumn(sortedArray, addArray, columnNumber):
+    newIndices = np.searchsorted(sortedArray[:, columnNumber],addArray[:,columnNumber])
+    return np.insert(sortedArray,newIndices ,addArray, axis=0)
 
 
 def sph2cart(az, el, r):
@@ -13,7 +12,22 @@ def sph2cart(az, el, r):
     z = r * np.sin(el)
     return [x, y, z]
 
+def getTargetBalls(centers, radius):
+    ballsDict = {"type": "BALL", "centers": np.array(centers), "radius": radius}
+    return ballsDict
 
 def getExteriorLimitTube(radius):
     tubeLimitDictionary = {"type": "TUBE", "radius": radius}
     return tubeLimitDictionary
+
+def getExteriorLimitBall(radius):
+    ballLimitDictionary = {"type": "BALL", "radius": radius}
+    return ballLimitDictionary
+
+def getStepLengthConstant(length):
+    data = {"type": "CONSTANT", "length": length}
+    return data
+
+def getStepLengthLevyFlights(alpha, beta):
+    data = {"type": "LEVY", "alpha": alpha, "beta": beta}
+    return data
