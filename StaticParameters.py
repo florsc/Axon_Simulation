@@ -17,7 +17,7 @@ staticParametersDict = {
     "initialThetas": [0, 0],
     "ExteriorLimit": hf.getExteriorLimitBall(15),
     "maximumNumberOfEncounters": 140,
-    "probabilityForNewBranchEachTimeStep": 0.001
+    "probabilityForNewBranchEachTimeStep": 0.01
 }
 debugStuff = {
     "printInformation" : False,

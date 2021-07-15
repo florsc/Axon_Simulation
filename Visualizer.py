@@ -13,8 +13,8 @@ class Visualizer:
     def addBallLimits(self, radius):
 
         # Ball
-        u = np.linspace(0, 2 * np.pi, 10)
-        v = np.linspace(0, np.pi, 10)
+        u = np.linspace(0, 2 * np.pi, 100)
+        v = np.linspace(0, np.pi, 100)
         x = radius * np.outer(np.cos(u), np.sin(v))
         y = radius * np.outer(np.sin(u), np.sin(v))
         z = radius * np.outer(np.ones(np.size(u)), np.cos(v))
@@ -62,9 +62,9 @@ class Visualizer:
             axon=self.simulatedAxons[i]
             tipPositions = axon["axonalTipPositions"]
             if axon["rootAxonIndex"] == i:
-                self.axis.plot3D([tipPositions[0][0]],[tipPositions[0][1]],[tipPositions[0][2]], 'ys',markersize=10) 
+                self.axis.plot3D([tipPositions[0][0]],[tipPositions[0][1]],[tipPositions[0][2]], 'ys',markersize=5) 
             else:
-                self.axis.plot3D([tipPositions[0][0]],[tipPositions[0][1]],[tipPositions[0][2]], 'gs',markersize=5) 
+                self.axis.plot3D([tipPositions[0][0]],[tipPositions[0][1]],[tipPositions[0][2]], 'rs',markersize=3) 
             xline = [tipPosition[0]
                      for tipPosition in axon["axonalTipPositions"]]
             yline = [tipPosition[1]

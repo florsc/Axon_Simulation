@@ -1,8 +1,10 @@
 import numpy as np
 
 def addNumpyArraySortedAlongColumn(sortedArray, addArray, columnNumber):
-    newIndices = np.searchsorted(sortedArray[:, columnNumber],addArray[:,columnNumber])
-    return np.insert(sortedArray,newIndices ,addArray, axis=0)
+    addArraySorted = np.array(addArray)[np.array(addArray)[:, 0].argsort()]
+    newIndices = np.searchsorted(sortedArray[:, columnNumber],addArraySorted[:,columnNumber])
+    return np.insert(sortedArray,newIndices ,addArraySorted, axis=0)
+
 
 
 def sph2cart(az, el, r):

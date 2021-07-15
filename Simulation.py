@@ -28,6 +28,7 @@ class Simulation:
             self.simpleDebugHelper.print("Init axon with starting point: " +
                   str(startingPositions[i]))
         self.occupiedSpatialAreaCenters= np.array(startingPositions)[np.array(startingPositions)[:, 0].argsort()]
+
         
     def getStepSize(self):
         # can be randomized but then self.numberOfAreaCentersEachGrowthStep needs to be adjusted
@@ -67,12 +68,12 @@ class Simulation:
         tipPositions = currentAxon["axonalTipPositions"]
         for growthStep in range(growthStepThisTimePoint):
             stepSize = np.linalg.norm(tipPositions[growthStep] - tipPositions[growthStep-1])
-            numberOfAreaCentersEachGrowthStep = math.floor(
-                stepSize/self.staticParameters["minimalDistanceBetweenAxons"])+1
+            numberOfAreaCentersEachGrowthStep = math.ceil(
+                stepSize/self.staticParameters["minimalDistanceBetweenAxons"])
             distanceBetweenCenters = stepSize / \
                 numberOfAreaCentersEachGrowthStep
-            for center in range(numberOfAreaCentersEachGrowthStep-1):
-                newSpatialAreaCenters.append(tipPositions[growthStep]+center*distanceBetweenCenters*(
+            for centerNumber in range(numberOfAreaCentersEachGrowthStep):
+                newSpatialAreaCenters.append(tipPositions[growthStep]+centerNumber*distanceBetweenCenters*(
                     tipPositions[growthStep]-tipPositions[growthStep-1]))
         self.occupiedSpatialAreaCenters = hf.addNumpyArraySortedAlongColumn(
             self.occupiedSpatialAreaCenters, np.array(newSpatialAreaCenters), 0)
@@ -96,7 +97,7 @@ class Simulation:
         growthStepThisTimePoint = 1
         interactionCounter = 0
 
-        while growthStepThisTimePoint < self.staticParameters["maximumNumberOfStepsEachTimePoint"] and interactionCounter < 2:
+        while growthStepThisTimePoint <= self.staticParameters["maximumNumberOfStepsEachTimePoint"] and interactionCounter < 2:
             growthVector, sampledTheta = self.sampleModelGrowthVector(currentAxon)
             currentAxon["axonalTipPositions"].append(
                 growthVector + currentAxon["axonalTipPositions"][-1])
@@ -124,12 +125,20 @@ class Simulation:
     def checkForOtherNeurites(self, currentAxon):
         otherNeuriteEncountered = False
         if len(self.occupiedSpatialAreaCenters) > 0:
-            tipPosition = currentAxon["axonalTipPositions"][-1]
-            self.simpleDebugHelper.start("checkForOtherNeurites")
-            lowHigh = np.searchsorted(self.occupiedSpatialAreaCenters[0],[tipPosition[0]-self.staticParameters["minimalDistanceBetweenAxons"], tipPosition[0]+self.staticParameters["minimalDistanceBetweenAxons"]])
-            
-            if np.any(np.argwhere(np.linalg.norm(self.occupiedSpatialAreaCenters[lowHigh[0]:lowHigh[1]] - tipPosition) <= self.staticParameters["minimalDistanceBetweenAxons"])):
-                otherNeuriteEncountered = True
+            newPosition = currentAxon["axonalTipPositions"][-1]
+            oldPosition = currentAxon["axonalTipPositions"][-2]
+            difference = oldPosition-newPosition
+            stepSize = np.linalg.norm(newPosition - oldPosition)
+            numberOfAreaCentersGrowthStep = math.floor(
+                stepSize/self.staticParameters["minimalDistanceBetweenAxons"])+1
+
+            centers = np.linspace(oldPosition,newPosition,numberOfAreaCentersGrowthStep)
+            for i in range(numberOfAreaCentersGrowthStep):
+                self.simpleDebugHelper.start("checkForOtherNeurites")
+                lowHigh = np.searchsorted(self.occupiedSpatialAreaCenters[:,0],[centers[i][0]-self.staticParameters["minimalDistanceBetweenAxons"], centers[i][0]+self.staticParameters["minimalDistanceBetweenAxons"]])
+                if np.any(np.argwhere(np.linalg.norm(self.occupiedSpatialAreaCenters[lowHigh[0]:lowHigh[1]] - centers[i]) <= self.staticParameters["minimalDistanceBetweenAxons"])):
+                    otherNeuriteEncountered = True
+                    break
 
             self.simpleDebugHelper.stop("checkForOtherNeurites")
         return otherNeuriteEncountered
