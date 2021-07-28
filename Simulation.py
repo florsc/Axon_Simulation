@@ -12,9 +12,9 @@ class Simulation:
         self.simpleDebugHelper.print(self.staticParameters)
         self.initializeVariables()
 
-    def sampleInitialThetas(self):
-        return np.tan(np.random.uniform(-math.pi,math.pi,2))
-
+    def sampleInitialDirection(self):
+        return np.array([np.random.uniform(-math.pi,math.pi), np.random.uniform(-math.pi,math.pi),1])
+    
     def initializeVariables(self):
         self.currentTimeStep = 0
         self.numberOfAxons = self.staticParameters["startingNumberOfAxons"]
@@ -23,7 +23,7 @@ class Simulation:
         startingPositions = self.getStartPositions()
         for i in range(self.staticParameters["startingNumberOfAxons"]):
             self.axons.append({"counter": 0, "axonalTipPositions": [np.array(
-                startingPositions[i])], "thetas": [self.sampleInitialThetas()], "interactionCounter": 0, "active": True, "rootAxonIndex" : i, "branchIndices" : []})
+                startingPositions[i])], "thetas": [self.sampleInitialDirection()], "interactionCounter": 0, "active": True, "rootAxonIndex" : i, "branchIndices" : [], "reachedTarget":False})
 
             self.simpleDebugHelper.print("Init axon with starting point: " +
                   str(startingPositions[i]))
@@ -37,31 +37,6 @@ class Simulation:
             return levy_stable.rvs(stepLengthData["alpha"], stepLengthData["beta"])
         if stepLengthData["type"] == "CONSTANT":
             return stepLengthData["length"]
-
-    def sampleModelGrowthVector(self, currentAxon):
-        alpha = self.staticParameters["alpha"]
-        beta = self.staticParameters["beta"]
-
-        lastTheta_0 = currentAxon["thetas"][-1][0]
-        expectation_0 = (alpha/(alpha+beta))*lastTheta_0
-        variation_0 = 1/math.sqrt(2*(alpha+beta))
-        newTheta_0 = np.random.normal(expectation_0, variation_0)
-
-        lastTheta_1 = currentAxon["thetas"][-1][1]
-        expectation_1 = (alpha/(alpha+beta))*lastTheta_1
-        variation_1 = 1/math.sqrt(2*(alpha+beta))
-        newTheta_1 = np.random.normal(expectation_1, variation_1)
-
-        # in the original simulation the external field is added here
-        # possibly TODO
-
-        finalAngle_0 = 2*np.arctan(lastTheta_0)
-        finalAngle_1 = 2*np.arctan(lastTheta_1)
-
-        stepSize = self.getStepSize()
-        growthVector = np.array(hf.sph2cart(
-            finalAngle_0, finalAngle_1, stepSize))
-        return growthVector, (newTheta_0, newTheta_1)
 
     def addOccupiedAreaCenters(self, currentAxon, growthStepThisTimePoint):
         newSpatialAreaCenters = []
@@ -80,7 +55,6 @@ class Simulation:
 
     def handleMechanicalInteraction(self, currentAxon, growthStepThisTimePoint):
         for i in range(min(2, growthStepThisTimePoint)):
-            currentAxon["thetas"].pop()
             currentAxon["axonalTipPositions"].pop()
 
     def checkNewBranchCondition(self):
@@ -92,16 +66,26 @@ class Simulation:
         branchingAxon["branchIndices"].append(len(self.axons))
         self.axons.append({"axonalTipPositions": [branchingPoint], "thetas": [self.staticParameters["initialThetas"]], "interactionCounter": branchingAxon["interactionCounter"], "active": True, "rootAxonIndex": branchingAxon["rootAxonIndex"], "branchIndices": []})
 
+    def sampleModelGrowthVector(self, currentAxon):
+        sampleData = self.staticParameters["growthLengthEachStep"] 
+        if sampleData["type"] == "LEVY" or sampleData["type"] == "CONSTANT" :
+            stepLength = self.getStepSize()
+            growthVectorPolar = np.array([np.random.uniform(-math.pi,math.pi), np.random.uniform(-math.pi,math.pi),stepLength])
+        
+        if sampleData["type"] == "DIRECTIONAL_BIASED_RANDOM_WALK":
+            pass
+
+        growthVector = np.array(hf.sph2cart(growthVectorPolar[0], growthVectorPolar[1],growthVectorPolar[2]))
+        return growthVector
 
     def runTimeStepForAxon(self, currentAxon):
         growthStepThisTimePoint = 1
         interactionCounter = 0
 
         while growthStepThisTimePoint <= self.staticParameters["maximumNumberOfStepsEachTimePoint"] and interactionCounter < 2:
-            growthVector, sampledTheta = self.sampleModelGrowthVector(currentAxon)
+            growthVector = self.sampleModelGrowthVector(currentAxon)
             currentAxon["axonalTipPositions"].append(
                 growthVector + currentAxon["axonalTipPositions"][-1])
-            currentAxon["thetas"].append(sampledTheta)
 
             if self.checkForMechanicalInteractions(currentAxon):
                 self.simpleDebugHelper.print("Mechanical Interaction encountered at position: " +
@@ -115,7 +99,7 @@ class Simulation:
             else:
                 growthStepThisTimePoint += 1
 
-        if self.checkNewBranchCondition():
+        if self.checkNewBranchCondition() and growthStepThisTimePoint > 1:
             self.createNewBranch(currentAxon, growthStepThisTimePoint)
 
         currentAxon["interactionCounter"] += interactionCounter
@@ -228,6 +212,8 @@ class Simulation:
             self.simpleDebugHelper.print("Axon reached finish at position." +
                   str(currentAxon["axonalTipPositions"][-1]))
             self.finishAxonAndBranches(self.axons[currentAxon["rootAxonIndex"]])
+            self.axons[currentAxon["rootAxonIndex"]]["reachedTarget"] = True
+            self.axons[currentAxon["rootAxonIndex"]]["reachedTargetTimestep"] = self.currentTimeStep
 
     def runSimulation(self):
         while (self.numberOfAxons - self.numberOfFinishedAxons) > 0:
@@ -248,3 +234,32 @@ class Simulation:
                     self.currentTimeStep += 1
 
         self.simpleDebugHelper.print("Simulation successfull finished.")
+
+
+    """ I will keep this just in case, but currently it isn't used (I know horrible practice, shame on me)
+    def sampleModelGrowthVector(self, currentAxon):
+        alpha = self.staticParameters["alpha"]
+        beta = self.staticParameters["beta"]
+
+        lastTheta_0 = currentAxon["thetas"][-1][0]
+        expectation_0 = (alpha/(alpha+beta))*lastTheta_0
+        variation_0 = 1/math.sqrt(2*(alpha+beta))
+        newTheta_0 = np.random.normal(expectation_0, variation_0)
+
+        lastTheta_1 = currentAxon["thetas"][-1][1]
+        expectation_1 = (alpha/(alpha+beta))*lastTheta_1
+        variation_1 = 1/math.sqrt(2*(alpha+beta))
+        newTheta_1 = np.random.normal(expectation_1, variation_1)
+
+        # in the original simulation the external field is added here
+        # possibly TODO
+
+        finalAngle_0 = 2*np.arctan(lastTheta_0)
+        finalAngle_1 = 2*np.arctan(lastTheta_1)
+
+        stepSize = self.getStepSize()
+        growthVector = np.array(hf.sph2cart(
+            finalAngle_0, finalAngle_1, stepSize))
+        return growthVector, (newTheta_0, newTheta_1)
+    """
+
